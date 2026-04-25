@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -40,6 +41,7 @@ import org.apache.iceberg.relocated.com.google.common.base.Splitter;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Type.PrimitiveType;
 import org.apache.iceberg.types.Type.TypeID;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.types.Types.BinaryType;
 import org.apache.iceberg.types.Types.BooleanType;
 import org.apache.iceberg.types.Types.DateType;
@@ -70,6 +72,14 @@ class SchemaUtils {
   private static final Logger LOG = LoggerFactory.getLogger(SchemaUtils.class);
 
   private static final Pattern TRANSFORM_REGEX = Pattern.compile("(\\w+)\\((.+)\\)");
+
+  static boolean isAutoCreateVariantField(String name, IcebergSinkConfig config) {
+    if (config.autoCreateVariantColumnNames().isEmpty()) {
+      return false;
+    }
+    String key = config.schemaCaseInsensitive() ? name.toLowerCase(Locale.ROOT) : name;
+    return config.autoCreateVariantColumnNames().contains(key);
+  }
 
   static PrimitiveType needsDataTypeUpdate(Type currentIcebergType, Schema valueSchema) {
     if (currentIcebergType.typeId() == TypeID.FLOAT && valueSchema.type() == Schema.Type.FLOAT64) {
@@ -275,14 +285,18 @@ class SchemaUtils {
           List<NestedField> structFields =
               valueSchema.fields().stream()
                   .map(
-                      field ->
-                          NestedField.builder()
-                              .isOptional(
-                                  config.schemaForceOptional() || field.schema().isOptional())
-                              .withId(nextId())
-                              .ofType(toIcebergType(field.schema()))
-                              .withName(field.name())
-                              .build())
+                      field -> {
+                        Type fieldType =
+                            isAutoCreateVariantField(field.name(), config)
+                                ? Types.VariantType.get()
+                                : toIcebergType(field.schema());
+                        return NestedField.builder()
+                            .isOptional(config.schemaForceOptional() || field.schema().isOptional())
+                            .withId(nextId())
+                            .ofType(fieldType)
+                            .withName(field.name())
+                            .build();
+                      })
                   .collect(Collectors.toList());
           return StructType.of(structFields);
         case STRING:
@@ -328,10 +342,16 @@ class SchemaUtils {
                 .filter(entry -> entry.getKey() != null && entry.getValue() != null)
                 .map(
                     entry -> {
-                      Type valueType = inferIcebergType(entry.getValue());
+                      String fieldName = entry.getKey().toString();
+                      Type valueType;
+                      if (isAutoCreateVariantField(fieldName, config)) {
+                        valueType = Types.VariantType.get();
+                      } else {
+                        valueType = inferIcebergType(entry.getValue());
+                      }
                       return valueType == null
                           ? null
-                          : NestedField.optional(nextId(), entry.getKey().toString(), valueType);
+                          : NestedField.optional(nextId(), fieldName, valueType);
                     })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());

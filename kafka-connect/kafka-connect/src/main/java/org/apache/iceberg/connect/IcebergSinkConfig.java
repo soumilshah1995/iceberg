@@ -23,8 +23,10 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.iceberg.IcebergBuild;
@@ -33,6 +35,7 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.base.Splitter;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -73,6 +76,8 @@ public class IcebergSinkConfig extends AbstractConfig {
   private static final String TABLES_DEFAULT_PARTITION_BY = "iceberg.tables.default-partition-by";
   private static final String TABLES_AUTO_CREATE_ENABLED_PROP =
       "iceberg.tables.auto-create-enabled";
+  private static final String TABLES_AUTO_CREATE_VARIANT_COLUMNS_PROP =
+      "iceberg.tables.auto-create-variant-columns";
   private static final String TABLES_EVOLVE_SCHEMA_ENABLED_PROP =
       "iceberg.tables.evolve-schema-enabled";
   private static final String TABLES_SCHEMA_FORCE_OPTIONAL_PROP =
@@ -157,6 +162,13 @@ public class IcebergSinkConfig extends AbstractConfig {
         false,
         Importance.MEDIUM,
         "Set to true to automatically create destination tables, false otherwise");
+    configDef.define(
+        TABLES_AUTO_CREATE_VARIANT_COLUMNS_PROP,
+        ConfigDef.Type.STRING,
+        null,
+        Importance.MEDIUM,
+        "Comma-separated top-level field names to create as Iceberg VARIANT when auto-creating "
+            + "tables (requires table format v3+)");
     configDef.define(
         TABLES_SCHEMA_FORCE_OPTIONAL_PROP,
         ConfigDef.Type.BOOLEAN,
@@ -246,6 +258,7 @@ public class IcebergSinkConfig extends AbstractConfig {
   private final Map<String, String> writeProps;
   private final Map<String, TableSinkConfig> tableConfigMap = Maps.newHashMap();
   private final JsonConverter jsonConverter;
+  private final Set<String> autoCreateVariantColumnNames;
 
   public IcebergSinkConfig(Map<String, String> originalProps) {
     super(CONFIG_DEF, originalProps);
@@ -269,7 +282,20 @@ public class IcebergSinkConfig extends AbstractConfig {
             ConverterConfig.TYPE_CONFIG,
             ConverterType.VALUE.getName()));
 
+    this.autoCreateVariantColumnNames = parseAutoCreateVariantColumnNames();
     validate();
+  }
+
+  private Set<String> parseAutoCreateVariantColumnNames() {
+    String raw = getString(TABLES_AUTO_CREATE_VARIANT_COLUMNS_PROP);
+    if (raw == null || raw.isEmpty()) {
+      return ImmutableSet.of();
+    }
+    return Arrays.stream(raw.split(COMMA_NO_PARENS_REGEX))
+        .map(String::trim)
+        .filter(s -> !s.isEmpty())
+        .map(s -> schemaCaseInsensitive() ? s.toLowerCase(Locale.ROOT) : s)
+        .collect(Collectors.toSet());
   }
 
   private void validate() {
@@ -434,6 +460,10 @@ public class IcebergSinkConfig extends AbstractConfig {
 
   public boolean autoCreateEnabled() {
     return getBoolean(TABLES_AUTO_CREATE_ENABLED_PROP);
+  }
+
+  public Set<String> autoCreateVariantColumnNames() {
+    return autoCreateVariantColumnNames;
   }
 
   public boolean evolveSchemaEnabled() {
