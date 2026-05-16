@@ -1,0 +1,25 @@
+{
+  "name": "iceberg-sink-orders",
+  "config": {
+    "connector.class": "org.apache.iceberg.connect.IcebergSinkConnector",
+    "tasks.max": "1",
+    "topics": "orders",
+    "consumer.auto.offset.reset": "earliest",
+    "iceberg.catalog.type": "hadoop",
+    "iceberg.catalog.warehouse": "file:///var/iceberg-warehouse",
+    "iceberg.tables": "default.orders",
+    "iceberg.tables.auto-create-enabled": "true",
+    "iceberg.tables.default-partition-by": "order_date",
+    "iceberg.tables.auto-create-props.format-version": "3",
+    "iceberg.tables.write-props.write.parquet.shred-variants": "true",
+    "iceberg.tables.write-props.write.parquet.variant-inference-buffer-size": "1000",
+    "iceberg.tables.evolve-schema-enabled": "true",
+    "iceberg.tables.upsert-mode-enabled": "false",
+    "iceberg.control.commit.interval-ms": "60000",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+    "errors.log.enable": "true"
+  }
+}
