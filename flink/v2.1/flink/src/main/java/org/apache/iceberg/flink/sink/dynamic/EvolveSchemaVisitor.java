@@ -194,6 +194,13 @@ public class EvolveSchemaVisitor extends SchemaWithPartnerVisitor<Integer, Boole
     return partnerId == null;
   }
 
+  @Override
+  public Boolean variant(Types.VariantType variant, Integer partnerId) {
+    // VARIANT types are handled just like other primitive types
+    // No special evolution rules needed - VARIANT is only compatible with VARIANT
+    return partnerId == null;
+  }
+
   private Type findFieldType(int fieldId) {
     if (fieldId == -1) {
       return existingSchema.asStruct();

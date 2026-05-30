@@ -201,6 +201,23 @@ public class CompareSchemasVisitor
     }
   }
 
+  @Override
+  public Result variant(Types.VariantType variant, Integer tableSchemaId) {
+    if (tableSchemaId == null) {
+      return Result.SCHEMA_UPDATE_NEEDED;
+    }
+
+    Type tableSchemaType = tableSchema.findField(tableSchemaId).type();
+    
+    // VARIANT types are only compatible with other VARIANT types
+    // No type widening is allowed from/to VARIANT
+    if (tableSchemaType.isVariantType()) {
+      return Result.SAME;
+    } else {
+      return Result.SCHEMA_UPDATE_NEEDED;
+    }
+  }
+
   static class PartnerIdByNameAccessors implements PartnerAccessors<Integer> {
     private final Schema tableSchema;
     private boolean caseSensitive;
